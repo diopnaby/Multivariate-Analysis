@@ -1,0 +1,486 @@
+---
+title: "Final Project"
+author: "Naby Diop"
+date: "12/16/2019"
+output: 
+  pdf_document: default
+  fig_caption: yes        
+  includes:  
+    in_header: my_header.tex
+  html_document: default
+params:
+  interactive: yes
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  out.width = "100%"
+)
+```
+
+
+```{r}
+library("PerformanceAnalytics")
+library(ggplot2)
+library(pheatmap)
+```
+
+
+```{r}
+Live = read.csv("Live.csv")
+attach(Live)
+```
+
+# Introduction
+
+On August 5, 2015, Facebook launched Lives. At first it was only destinated to celebrities, but after the success that it has encounter it was soon oppened to every Facebook user. The data Live collect the reactions of Facebook users from "Facebook pages of 10 Thai fashion and cosmetics retail sellers Posts of a different nature (video, photos, statuses, and links). Engagement metrics consist of comments, shares, and reactions." More information about the data can be found the on the [UCI machine learning](http://archive.ics.uci.edu/ml/datasets/Facebook+Live+Sellers+in+Thailand). 
+The goal of this study is to do an comparative analysis between two distinct period: before and after August 5, 2015. Therefore, we will be using the technics of unsupervised learnling such as principal componant analysis, a tool used for data visualization or data pre-processing before supervised techniques are applied, and clustering, a broad class of methods for discovering unknown subgroups in data. We seek to visualize the importance of viodeo by secking how important is the variables (num_wows, num_loves, num_sade) that were introduce after Facebook live videos was launched.
+
+# Data
+
+```{r}
+str(Live)
+```
+
+The dataset Live was collected by Nassim Dehouche, a Ph.D researcher at Mahidol University International College. It has 7050 observations, 16 variables. We first examine the data by looking at its structure. The first thing that we realized is that the data has four additional variables that should be removed. The second thing that we noticed is that the data is a mix of numerical and categorical variables. However, the variable __status_published__ is recorded as factor type where it should be date type. We convert this variable to the apopriate type (date type), than we will look at the summary of the data and analyze it before forwarder analysis. 
+
+```{r}
+Live = Live[ , -c(13, 14, 15, 16)]
+```
+
+After we remove the four last colones we can look at the names of the varibles in the data using the function __names__ in R.
+
+```{r}
+names(Live)
+```
+
+Before we look at the summary, we first convert the variable __status_published__ to date type.
+
+```{r}
+time= as.character(Live$status_published)
+Live$status_published = as.Date(time, format="%m/%d/%Y %H:%M")
+Live$status_type = as.factor(Live$status_type)
+```
+
+*Here is the summary*
+
+```{r}
+summary(Live)
+```
+
+We first noticed from the summary that non of colones has missing values. We can see that the median status_published is 2017-11-18 mainning more data was collected after Facebook lives was launched. Also the status_id should be removed from the data because it won't have any effect on forwarder analysis. 
+
+```{r}
+Live  = Live[-1]
+```
+
+Now we can look at the corrolation of the reactions (num_comments, num_shares, num_likes, num_loves, num_wows, num_hahas, num_sads, num_angrys) from users to the different types of posts (video, link, photo).
+
+```{r}
+Reactions  = Live[, c(3,4, 5, 6, 7, 8, 9, 10, 11)]
+```
+
+```{r}
+S = cor(Reactions)
+```
+
+```{r}
+pheatmap(as.matrix(S),cellwidth = 25,main = "Heatmap for the Corrolation", cellheight = 25, display_numbers = TRUE, Rowv = TRUE, Colv = FALSE)
+```
+
+This heatmap of the corrolation matrix indicates a strong positive relationship between the variables num_likes and num_reactions (0.99) meaning almost all the users who likes the videos also react to it. num_shares and num_loves are also high corrolated (0.82). This means that more than 80% of users who love a given post also shared it. The variables num_likes and num_angrys are weakly corrolated (0.09) which makes sens because someone who is angry about a post certainly doesn't like it.
+
+# Analysis 
+
+As stated in the introduction, we seek to compare users reactions before and after August 5, 2015. To do such analysis we first split the data into two parts. One part recording the reactions before August 5, 2015 and another part after that. We firs use the cluster method and end up with principal componant analysis method (PCA).
+
+```{r}
+Lives <- split(Live,Live$status_published<as.Date("2015-08-05"))
+```
+
+```{r}
+Live1 = Lives[1]$"FALSE"
+Live2 = Lives[2]$"TRUE"
+```
+
+## Clustering 
+### K-means method
+#### Before August 5, 2015.
+
+Lets first look at the scartteplot of the data.
+
+```{r}
+plot(Live2[-2])
+```
+
+The scartteplot shows that only the first quarter of the plots are maininful here. This fisrt quarter takes in count only the variables rum_reactions, num_likes, num_comments and num_shares. This makes sens since the others reactions do not exist at that time. It also indicate the presence of two single cluster with variables like num_shares, num_reactions, num_comments and num_likes. The other variables indicates only single cluster.
+Now before we fit a clustering model let look at first the correlation matrix of the first portion of the data.
+
+```{r}
+Reactions1  = Live1[, c(3,4, 5, 6, 7, 8, 9, 10, 11)]
+Reactions2  = Live2[, c(3,4, 5, 6, 7, 8, 9, 10, 11)]
+```
+
+
+```{r}
+S1 = cor(Reactions1)
+S2 = cor(Reactions2[, c(1, 2, 3, 4)])
+```
+
+```{r}
+pheatmap(as.matrix(S2),cellwidth = 25,main = "Heatmap for the Corrolation", cellheight = 25, display_numbers = TRUE, Rowv = TRUE, Colv = FALSE)
+```
+
+Reactions and shares are collinear (corrolation = 1). The variables num_shares and num_comments are also high corrolated (0.75) wheras num_shares, num_likes and num_reactions are weakly corrolated. 
+
+*Fitting k-means*
+
+We have intuitively dirive from the scatteplot two clusters, we will be at first fitting the data with initialy k=2 (number of clusters).
+
+```{r}
+km_Live = kmeans(scale(Live2[,c(3,4, 5, 6)]), 2)
+```
+
+```{r}
+xtabs(~ km_Live$cluster + status_type, data = Live2[-2])
+```
+
+This table shows that first cluster contains only the 5links, 1027 photos, 5 status and 270 videos. The second cluster contains the 9 links, 101 photos, 20 status and 63 videos. A visualisation of the clusters is shown bellow.
+
+```{r}
+plot(Live2[-2], col = km_Live$cluster)
+```
+
+We notice that the model does a very pore work. Some videos are being classified as photos and links as status vis versa. Therefore it is important to look for the optimal value of k. To do so we first fit kmeans for 10 different value ok k from 1 to 10. Then we calculate for each of this 10 models the percent variability in the data based on the model.Finally we plot the percent variability against it correspondind number or cluster.
+
+```{r}
+k = list()
+for (i in 1:10) {
+  k[[i]] = kmeans(scale(Live2[,c(3,4, 5, 6)]), i)
+}
+```
+
+```{r}
+betweenss_totss = list()
+for (i in 1:10) {
+  betweenss_totss[[i]] = k[[i]]$betweenss/k[[i]]$totss
+}
+```
+
+```{r}
+plot(1:10, betweenss_totss, type = "b", ylab = "Between_ss/total_ss", xlab = "Clusters(k)")
+```
+
+This plot indicates that four cluster is the optimal number of cluster.
+
+```{r}
+xtabs(~ k[[4]]$cluster + status_type, data = Live2[-2])
+```
+The table shows that first cluster has no links and status ant it contains only 5 photos and 7 videos. The second cluster contains 9 links, 40 photos, 2 status and 87 videos. The third cluster contains 1 link, 1022 photos, 5 status and 207 videos. The last cluster contains 4 links, 61 photos, 18 status and 32 videos. The accuracy of the model is given bellow.
+
+```{r}
+betweenss_totss[[4]] = k[[4]]$betweenss/k[[4]]$totss
+betweenss_totss[[4]]
+```
+
+80% of the variability of the data is explained by the model with is a good indicator.
+
+#### After August 5, 2015.
+
+Lets look at the scartterplot first.
+
+```{r}
+plot(Live1[-2])
+```
+
+Over here all the variables are present since now Facebook lives are being used. The scatteplot roughly discribes that many variables have linear relationship. To have more insight about that we can look at the heatmap of the correlation matrix. 
+
+```{r}
+pheatmap(as.matrix(S1),cellwidth = 20,main = "Heatmap for the Corrolation", cellheight = 20, display_numbers = TRUE, Rowv = TRUE, Colv = FALSE)
+```
+
+Here likes and reactions are colinear (0.99). shares and loves are very high corrolated. Wows and sades are not corrolated same as reactions and sades. 
+
+*Fitting k-means*
+
+Here we initially fit kmeans with four cluster.
+
+```{r}
+km_Live1 = kmeans(scale(Live1[,c(3,4, 5, 6, 7, 8, 9,10,11)]), centers = 4)
+```
+
+```{r}
+xtabs(~ km_Live1$cluster + status_type, data = Live1[-2])
+```
+
+The table shows, as for the first portion of the data, that first cluster has no links and status ant it contains only 1 photos and 37 videos. The second cluster contains 48 links, 3008 photos, 277 status and 1613 videos. The third cluster contains 1 link, 130 photos, 63 status and 10 videos. The last cluster contains no link and status 21 photos, and 341 videos.
+
+```{r}
+plot(Live1[-2], col = km_Live1$cluster)
+```
+
+The presence of miss classification is present, but the model does identify four acceptable clusters. We must, notice that in some case the clusters are overlapping.
+
+```{r}
+k = list()
+for (i in 1:10) {
+  k[[i]] = kmeans(scale(Live1[,c(3,4, 5, 6)]), i)
+}
+```
+
+```{r}
+betweenss_totss = list()
+for (i in 1:10) {
+  betweenss_totss[[i]] = k[[i]]$betweenss/k[[i]]$totss
+}
+```
+
+```{r}
+plot(1:10, betweenss_totss, type = "b", ylab = "Between_ss/total_ss", xlab = "Clusters(k)")
+```
+
+As indicated above, here again four clusters seems to be optimal number of clusters.
+
+```{r}
+betweenss_totss[[4]] = k[[i]]$betweenss/k[[4]]$totss
+betweenss_totss[[4]]
+```
+
+For the second portion of the data the model have better performance then for the first part (85%).
+
+## PCA 
+### before August 5, 2015.
+
+
+```{r}
+pca_Live2 = princomp(covmat = S2)
+summary(pca_Live2, loadings = T)
+```
+
+Two componants are enough for reduicing the dimension of this data, roughly 94% of the variability in data is explained by these two componants (cumulative Proportion = 0.938). We plot the loadings of this two componants in oder to visualize the most important variable for the two componants.
+
+```{r}
+plot(pca_Live2$loadings, type = "p", col = "red")
+text(pca_Live2$loadings, row.names(pca_Live2$loadings), cex = 0.5)
+```
+
+As indicated by the numerical values of the loadings, from this plot we can see that the variables num_likes and reactions are overlapping on the top right corner of the plot. The position of these two variables indicates that they are the most important for the first and second componant, Comments and shares are the least important for the two first componants. Also we notice that likes and reactions are equaly important for both componants. Whereas commantes are more important then shares for both componants. 
+
+### After August 5, 2015.
+
+```{r}
+pca_Live1 = princomp(covmat = S1)
+summary(pca_Live1, loadings = T)
+```
+
+A visualization of the loadings is shown bellow.
+
+```{r}
+plot(pca_Live1$loadings, col = "red")
+text(pca_Live1$loadings, row.names(pca_Live1$loadings), cex = 0.5)
+```
+
+From this plot we can see that the most important feature for the first componant is num_love follow by num_shares, num_reactions and num_likes. This basicly implying that videos incators are the most capture by componant one. The most important variables for the second componant are num_likes and um_reactions. These two variables are indicators of photos, links and status.
+
+# Conclusion
+
+The introduction of facbook lives has a lot of impact. It increases the numbers of comments and shares. In fact for the PCA visualisation we notice before the introction of Facebook lives only comments and shares was important, but after that loves becomes more important which is a video indicator. Also the number of shares reactions double from before August 2015 to after the same date (sugestesd by the clusters). Finally we can conclude that Facebook videos has given more reactions in general to the Thai sellers posts.
+
+
+# Appendix
+
+__Data Preparation__
+
+```{r, echo=TRUE, eval=FALSE}
+library("PerformanceAnalytics")
+library(ggplot2)
+library(pheatmap)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+Live = read.csv("Live.csv")
+attach(Live)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+str(Live)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+Live = Live[ , -c(13, 14, 15, 16)]
+```
+
+```{r, echo=TRUE, eval=FALSE}
+names(Live)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+time= as.character(Live$status_published)
+Live$status_published = as.Date(time, format="%m/%d/%Y %H:%M")
+Live$status_type = as.factor(Live$status_type)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+summary(Live)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+Live  = Live[-1]
+```
+
+```{r, echo=TRUE, eval=FALSE}
+Reactions  = Live[, c(3,4, 5, 6, 7, 8, 9, 10, 11)]
+```
+
+__Preliminary analysis__
+
+```{r, echo=TRUE, eval=FALSE}
+S = cor(Reactions)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+pheatmap(as.matrix(S),cellwidth = 25,main = "Heatmap for the
+Corrolation", cellheight = 25, display_numbers = TRUE, Rowv = 
+TRUE, Colv = FALSE)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+Lives <- split(Live,Live$status_published<as.Date("2015-08-05"))
+```
+
+```{r, echo=TRUE, eval=FALSE}
+Live1 = Lives[1]$"FALSE"
+Live2 = Lives[2]$"TRUE"
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(Live2[-2])
+```
+
+```{r, echo=TRUE, eval=FALSE}
+Reactions1  = Live1[, c(3,4, 5, 6, 7, 8, 9, 10, 11)]
+Reactions2  = Live2[, c(3,4, 5, 6, 7, 8, 9, 10, 11)]
+```
+
+
+```{r, echo=TRUE, eval=FALSE}
+S1 = cor(Reactions1)
+S2 = cor(Reactions2[, c(1, 2, 3, 4)])
+```
+
+```{r, echo=TRUE, eval=FALSE}
+pheatmap(as.matrix(S2),cellwidth = 25,main = "Heatmap for 
+the Corrolation", cellheight = 25, display_numbers = TRUE, 
+Rowv = TRUE, Colv = FALSE)
+```
+
+__Kmeans model__
+
+```{r, echo=TRUE, eval=FALSE}
+km_Live = kmeans(scale(Live2[,c(3,4, 5, 6)]), 2)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+xtabs(~ km_Live$cluster + status_type, data = Live2[-2])
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(Live2[-2], col = km_Live$cluster)
+```
+
+
+```{r, echo=TRUE, eval=FALSE}
+k = list()
+for (i in 1:10) {
+  k[[i]] = kmeans(scale(Live2[,c(3,4, 5, 6)]), i)
+}
+```
+
+```{r, echo=TRUE, eval=FALSE}
+betweenss_totss = list()
+for (i in 1:10) {
+  betweenss_totss[[i]] = k[[i]]$betweenss/k[[i]]$totss
+}
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(1:10, betweenss_totss, type = "b", ylab = "Between_ss/total_ss", xlab = "Clusters(k)")
+```
+
+```{r, echo=TRUE, eval=FALSE}
+betweenss_totss[[4]] = k[[i]]$betweenss/k[[4]]$totss
+betweenss_totss[[4]]
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(Live1[-2])
+```
+
+```{r, echo=TRUE, eval=FALSE}
+pheatmap(as.matrix(S1),cellwidth = 20,main = "Heatmap for 
+the Corrolation", cellheight = 20, display_numbers = TRUE, 
+Rowv = TRUE, Colv = FALSE)
+```
+
+
+```{r, echo=TRUE, eval=FALSE}
+km_Live1 = kmeans(scale(Live1[,c(3,4, 5, 6, 7, 8, 9,10,11)]), centers = 4)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+xtabs(~ km_Live1$cluster + status_type, data = Live1[-2])
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(Live1[-2], col = km_Live1$cluster)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(1:10, betweenss_totss, type = "b", ylab = "Between_ss/total_ss", xlab = "Clusters(k)")
+```
+
+__PCA__
+
+```{r, echo=TRUE, eval=FALSE}
+pca_Live2 = princomp(covmat = S2)
+summary(pca_Live2, loadings = T)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(pca_Live2$loadings, type = "p", col = "red")
+text(pca_Live2$loadings, row.names(pca_Live2$loadings), cex = 0.5)
+```
+
+
+```{r, echo=TRUE, eval=FALSE}
+pca_Live1 = princomp(covmat = S1)
+summary(pca_Live1, loadings = T)
+```
+
+```{r, echo=TRUE, eval=FALSE}
+plot(pca_Live1$loadings, col = "red")
+text(pca_Live1$loadings, row.names(pca_Live1$loadings), cex = 0.5)
+```
+
+
+
+
+# Reference
+
+Alvin C. Rencher and William F. Christensen Method of Multivariate Analysis, John Wiley & Sons, 3$^{th}$ edition, 2012.
+
+[Robert Gentleman, Kurt Hornik, and Giovanni Parmigiani, *An Introduction to Applied Multivariate Analysis with R*, Springer, 2011.](https://link.springer.com/content/pdf/10.1007%2F978-1-4419-9650-3.pdf)
+
+Gareth James, Daniela Witten, and Trevor Hastie *An Introduction to Statistical Learning*, Springer+Business Media, 2013.
+
+Jay L. Devore, and Kenneth N. Berk, *Modern Mathematical Statistics With Applications*, Springer, Second Edition, 2012.
+
+Julian J. Faraway *Extending the Linear Model with R*: Generalized Linear, Mixed Effect and Nonparametric Regression Models, CRC Press, Second edition, 2016.
+
+[Kutner, Nachtsheim, Neter and Li, *Applied Linear Statistical Models*, McGraw-Hill!Irwin, 5th edition, 2015.](https://d1b10bmlvqabco.cloudfront.net/attach/is282rqc4001vv/is6ccr3fl0e37q/iwfnjvgvl53z/Michael_H_Kutner_Christopher_J._Nachtsheim_JohnBookFi.org.pdf)
+
+
